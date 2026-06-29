@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>MAFIFA – Watch HD</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background: #0b0f15;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+      gap: 20px;
+    }
+    .header {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #131a23;
+      border: 1px solid #2a3340;
+      border-radius: 16px;
+      padding: 15px 25px;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-icon {
+      width: 46px; height: 46px;
+      background: linear-gradient(135deg, #00c853, #009624);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      color: #fff;
+      font-weight: 900;
+    }
+    .logo h1 { font-size: 1.5rem; letter-spacing: -0.5px; }
+    .logo span { color: #f9a825; font-size: 0.7rem; letter-spacing: 2px; }
+    .live-tag {
+      background: rgba(229,57,53,0.15);
+      border: 1px solid rgba(229,57,53,0.5);
+      padding: 8px 18px;
+      border-radius: 25px;
+      font-weight: 700;
+      font-size: 0.8rem;
+      color: #ff6b6b;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .live-dot {
+      width: 10px; height: 10px;
+      background: #e53935;
+      border-radius: 50%;
+      box-shadow: 0 0 12px #e53935;
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .server-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      width: 100%;
+      max-width: 1100px;
+    }
+    .server-btn {
+      flex: 1;
+      min-width: 120px;
+      padding: 14px;
+      background: #131a23;
+      border: 2px solid #2a3340;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #ccc;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: 0.2s;
+    }
+    .server-btn.active {
+      border-color: #00c853;
+      background: rgba(0,200,83,0.08);
+      color: #fff;
+      box-shadow: 0 0 20px rgba(0,200,83,0.15);
+    }
+    .server-num {
+      background: #1b5e20;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+    .server-btn.active .server-num {
+      background: #00c853;
+      box-shadow: 0 0 10px rgba(0,200,83,0.6);
+    }
+
+    .player-container {
+      width: 100%;
+      max-width: 1100px;
+      background: #000;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 2px solid #2a3340;
+      position: relative;
+      aspect-ratio: 16/9;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+    }
+    iframe, video {
+      width: 100%; height: 100%;
+      border: none;
+      display: block;
+      object-fit: contain;
+    }
+    .hls-video { display: none; }
+    .placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0a;
+      color: #555;
+      gap: 14px;
+      pointer-events: none;
+    }
+    .fullscreen-btn {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      background: rgba(0,0,0,0.65);
+      border: none;
+      color: #fff;
+      font-size: 1.4rem;
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      z-index: 10;
+      transition: 0.2s;
+    }
+    .fullscreen-btn:hover { background: rgba(0,200,83,0.7); }
+    .status-bar {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #131a23;
+      border-radius: 12px;
+      padding: 10px 20px;
+      border: 1px solid #2a3340;
+      font-size: 0.85rem;
+      color: #9e9e9e;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .status-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: #00c853;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .status-dot.offline { background: #666; }
+    .refresh-link { color: #f9a825; cursor: pointer; }
+    .refresh-link:hover { text-decoration: underline; }
+    footer {
+      color: #444;
+      font-size: 0.7rem;
+      max-width: 1100px;
+      width: 100%;
+      text-align: center;
+    }
+    @media (max-width: 700px) {
+      .header { flex-direction: column; align-items: flex-start; }
+      .server-btn { padding: 12px; font-size: 0.9rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">&#9917;</div>
+      <div>
+        <h1>MAFIFA</h1>
+        <span>Stream Hub</span>
+      </div>
+    </div>
+    <div class="live-tag"><span class="live-dot"></span> LIVE</div>
+  </header>
+
+  <div class="server-row" id="serverButtonsContainer"></div>
+
+  <div class="player-container" id="playerContainer">
+    <div class="placeholder" id="placeholder">
+      <span style="font-size:3rem; opacity:0.6;">&#128250;</span>
+      <p>Waiting for stream link...</p>
+    </div>
+    <iframe id="streamFrame" style="display:none;" allowfullscreen allow="autoplay; encrypted-media" loading="lazy"></iframe>
+    <video id="hlsVideo" class="hls-video" controls playsinline></video>
+    <button class="fullscreen-btn" id="fullscreenBtn" title="Fullscreen">&#9974;</button>
+  </div>
+
+  <div class="status-bar">
+    <span><span class="status-dot" id="statusDot"></span> <span id="statusText">Initializing...</span></span>
+    <span>Active: <strong id="currentServerLabel">—</strong></span>
+    <span class="refresh-link" onclick="refreshStream()">Reload Stream</span>
+  </div>
+
+  <footer>MAFIFA Stream — Real‑time links from Firebase</footer>
+
+  <script>
+    // UPDATE with your actual Realtime Database URL
+    const firebaseConfig = {
+      apiKey: "AIzaSyBw71Sev6aBJwSDvz3m3UfL0mPaXSVKMAs",
+      authDomain: "ma-fifa.firebaseapp.com",
+      projectId: "ma-fifa",
+      storageBucket: "ma-fifa.firebasestorage.app",
+      messagingSenderId: "961114725095",
+      appId: "1:961114725095:web:f1e9b2c879c7f00f4d2042",
+      databaseURL: "https://ma-fifa-default-rtdb.firebaseio.com"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let servers = {};
+    let activeServerId = null;
+    let hlsInstance = null;
+    const streamFrame = document.getElementById('streamFrame');
+    const hlsVideo = document.getElementById('hlsVideo');
+    const placeholder = document.getElementById('placeholder');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const currentServerLabel = document.getElementById('currentServerLabel');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const playerContainer = document.getElementById('playerContainer');
+    const serverBtnsContainer = document.getElementById('serverButtonsContainer');
+
+    function isHlsUrl(url) {
+      return /\.m3u8($|\?)|\.m3u($|\?)/i.test(url || '');
+    }
+
+    function stopCurrentStream() {
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+      hlsVideo.style.display = 'none';
+      hlsVideo.pause();
+      hlsVideo.removeAttribute('src');
+      hlsVideo.load();
+      streamFrame.style.display = 'none';
+      streamFrame.src = '';
+    }
+
+    function playHls(url) {
+      stopCurrentStream();
+      placeholder.style.display = 'none';
+      hlsVideo.style.display = 'block';
+      if (Hls.isSupported()) {
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(hlsVideo);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+          hlsVideo.play().catch(e => console.warn(e));
+        });
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            switch(data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                hlsInstance.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                hlsInstance.recoverMediaError();
+                break;
+              default:
+                stopCurrentStream();
+                showPlaceholder('HLS stream error');
+                break;
+            }
+          }
+        });
+      } else if (hlsVideo.canPlayType('application/vnd.apple.mpegurl')) {
+        hlsVideo.src = url;
+        hlsVideo.play().catch(e => console.warn(e));
+      } else {
+        showPlaceholder('HLS not supported');
+      }
+    }
+
+    function playIframe(url) {
+      stopCurrentStream();
+      placeholder.style.display = 'none';
+      streamFrame.style.display = 'block';
+      streamFrame.src = url;
+    }
+
+    function showPlaceholder(msg) {
+      stopCurrentStream();
+      placeholder.style.display = 'flex';
+      placeholder.querySelector('p').textContent = msg || 'No stream available';
+      statusDot.className = 'status-dot offline';
+      statusText.textContent = 'Link missing or invalid';
+    }
+
+    function loadStream(url, serverId) {
+      stopCurrentStream();
+      if (!url || url.trim() === '') {
+        showPlaceholder('Server link not configured');
+        return;
+      }
+      statusDot.className = 'status-dot';
+      statusText.textContent = 'Loading...';
+      if (isHlsUrl(url)) {
+        playHls(url.trim());
+      } else {
+        playIframe(url.trim());
+      }
+    }
+
+    function renderServerButtons() {
+      serverBtnsContainer.innerHTML = '';
+      const ids = Object.keys(servers);
+      if (ids.length === 0) {
+        serverBtnsContainer.innerHTML = '<p style="color:#666;">No servers configured yet.</p>';
+        return;
+      }
+      ids.forEach(id => {
+        const srv = servers[id];
+        const btn = document.createElement('button');
+        btn.className = 'server-btn';
+        if (id === activeServerId) btn.classList.add('active');
+        btn.innerHTML = `<span class="server-num">${srv.name || id}</span> ${srv.name || 'Server'}`;
+        btn.addEventListener('click', () => switchServer(id));
+        serverBtnsContainer.appendChild(btn);
+      });
+    }
+
+    function switchServer(serverId) {
+      if (!servers[serverId]) return;
+      activeServerId = serverId;
+      renderServerButtons();
+      currentServerLabel.textContent = servers[serverId]?.name || serverId;
+      loadStream(servers[serverId]?.url, serverId);
+    }
+
+    function refreshStream() {
+      if (activeServerId && servers[activeServerId]) {
+        loadStream(servers[activeServerId].url, activeServerId);
+      }
+    }
+
+    function startSync() {
+      db.ref('streams').on('value', snap => {
+        servers = snap.val() || {};
+        if (!activeServerId || !servers[activeServerId]) {
+          const firstId = Object.keys(servers)[0];
+          if (firstId) {
+            activeServerId = firstId;
+          } else {
+            activeServerId = null;
+            showPlaceholder('No server configured');
+            currentServerLabel.textContent = '—';
+          }
+        }
+        renderServerButtons();
+        if (activeServerId && servers[activeServerId]) {
+          loadStream(servers[activeServerId].url, activeServerId);
+          currentServerLabel.textContent = servers[activeServerId]?.name || activeServerId;
+        }
+      });
+    }
+
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        playerContainer.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      const key = e.key;
+      if (key === 'f' || key === 'F') {
+        fullscreenBtn.click();
+        return;
+      }
+      const num = parseInt(key);
+      if (!isNaN(num) && num >= 1 && num <= 9) {
+        const ids = Object.keys(servers);
+        if (ids.length >= num) {
+          switchServer(ids[num - 1]);
+        }
+      }
+    });
+
+    startSync();
+  </script>
+</body>
+  </html>
